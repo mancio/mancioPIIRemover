@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mancioPIIRemover"
+version = "0.1.0"
+description = "Local PDF contract redaction and review"
+requires-python = ">=3.11"
+dependencies = ["PyMuPDF>=1.27.2,<2", "Pillow>=11,<13"]
+
+[project.optional-dependencies]
+privacy = ["transformers>=5.23,<6", "torch>=2.6,<3"]
+gliner = ["gliner2>=2.1,<3"]
+presidio = ["presidio-analyzer>=2.2.366,<3"]
+
+[project.scripts]
+mancio-pii = "mancio_pii.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mancio_pii*"]

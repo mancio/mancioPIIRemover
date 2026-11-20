@@ -51,7 +51,7 @@ def chunks(text, limit=1000, overlap=200):
         start = end - overlap
 
 
-def load_engine(name, directory: Path, language):
+def load_engine(name, directory: Path, language, device="cpu"):
     if name == "privacy":
         from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
 
@@ -61,7 +61,7 @@ def load_engine(name, directory: Path, language):
             model_path, local_files_only=True, use_safetensors=True,
         )
         classify = pipeline(
-            "token-classification", model=model, tokenizer=tokenizer, device=-1,
+            "token-classification", model=model, tokenizer=tokenizer, device=device,
             aggregation_strategy="simple",
         )
 
@@ -77,7 +77,7 @@ def load_engine(name, directory: Path, language):
         model_path = directory / name
         if not (model_path / "model.safetensors").is_file():
             raise FileNotFoundError("GLiNER2 weights missing")
-        model = GLiNER2.from_pretrained(str(model_path))
+        model = GLiNER2.from_pretrained(str(model_path), map_location=device)
         model.eval()
 
         def detect(text):

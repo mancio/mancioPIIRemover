@@ -2,7 +2,7 @@
 
 Local Windows Python CLI for preparing a redacted copy of a PDF contract for visual review. By default it combines detections from all three engines and applies every candidate mask.
 
-- [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) runs in Transformers on CPU.
+- [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) runs locally in Transformers.
 - [Fastino GLiNER2-PII](https://huggingface.co/fastino/gliner2-privacy-filter-PII-multi) adds multilingual detection.
 - [Microsoft Presidio](https://github.com/microsoft/presidio) runs with English or Polish spaCy. Built-in project rules also detect Polish IBANs and labeled PESEL, NIP and bank-account numbers.
 
@@ -15,6 +15,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
 Setup downloads roughly 4 GB of model weights plus dependencies and OCR data. Processing uses local weights and does not send PDF data to a service. If you only need selected engines, install the corresponding extras from `pyproject.toml` and run with `--engines`. The default stops if a selected engine is unavailable or fails. Use `--allow-partial` to explicitly accept reduced coverage. Check the engine status in the report.
+
+## Progress and hardware
+
+Add `--verbose` (or `-v`) for elapsed time, model loading, device choices, and per-page OCR, detection and rendering progress. Progress messages leave out extracted text and matched values.
+
+The default `--device auto` uses CUDA for OpenAI Privacy Filter and GLiNER2 when PyTorch can access an NVIDIA GPU. Presidio, OCR and PDF rendering run on CPU. Use `--device cpu` to force CPU or `--device cuda` to require CUDA for the neural models. `--threads 16` configures PyTorch CPU threads on a 16-thread machine. Other stages have their own threading behavior, and more threads can be slower for small inputs.
+
+For Python 3.12 on Windows with a compatible NVIDIA driver, install the tested CUDA-enabled PyTorch build into the project environment after running setup:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install 'torch==2.11.0+cu128' --index-url https://download.pytorch.org/whl/cu128 --extra-index-url https://pypi.org/simple
+```
 
 ## Run the synthetic example
 

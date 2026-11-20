@@ -53,7 +53,7 @@ def rectangles(layer, start, end):
     return lines.values()
 
 
-def detect(layer, detectors, findings, page, engine_status, allow_partial):
+def detect(layer, detectors, findings, page, engine_status, allow_partial, progress, layer_name):
     def add(hit, offset, engine):
         for box in rectangles(layer, offset + hit.start, offset + hit.end):
             # Text extraction coordinates are unrotated. Masks use displayed coordinates.
@@ -66,7 +66,10 @@ def detect(layer, detectors, findings, page, engine_status, allow_partial):
 
     for hit in document_identifiers(layer.text):
         add(hit, 0, "document-patterns")
+    if not layer.text.strip():
+        return
     for engine, detector in detectors.items():
+        progress(f"  {layer_name}: {engine} analyzing")
         try:
             for offset, content in chunks(layer.text):
                 if content.strip():
@@ -78,6 +81,7 @@ def detect(layer, detectors, findings, page, engine_status, allow_partial):
             if not allow_partial:
                 raise ReviewError(f"{engine} failed on page {page.number + 1} ({type(exc).__name__}).") from None
             engine_status[engine] = f"failed on one or more pages ({type(exc).__name__})"
+            progress(f"  {engine} failed ({type(exc).__name__})")
 
 
 def add_manual_boxes(page, boxes, findings):
@@ -106,13 +110,14 @@ def render_redacted(page, findings, output, dpi):
     destination.insert_image(destination.rect, stream=pixels.getvalue())
 
 
-def redact(source, output, detectors, engine_status, args, manual):
+def redact(source, output, detectors, engine_status, args, manual, progress=lambda _: None):
     if not source.is_pdf or source.needs_pass or not len(source):
         raise ReviewError("Input must be a readable, unlocked PDF with at least one page.")
     if any(key not in {str(n) for n in range(1, len(source) + 1)} for key in manual):
         raise ReviewError("Manual mask page numbers must match the input PDF.")
     pages = []
     for page in source:
+        progress(f"Page {page.number + 1}/{len(source)}: extracting text")
         if page.rect.get_area() * (max(args.dpi, 300) / 72) ** 2 > 45_000_000:
             raise ReviewError(f"Page {page.number + 1} is too large to render safely.")
         findings = {}
@@ -120,15 +125,16 @@ def redact(source, output, detectors, engine_status, args, manual):
         ocr = (args.ocr_all or not layer.text.strip() or "\ufffd" in layer.text
                or bool(page.get_image_info()) or bool(page.first_annot) or bool(page.first_widget))
         notes = []
-        detect(layer, detectors, findings, page, engine_status, args.allow_partial)
+        detect(layer, detectors, findings, page, engine_status, args.allow_partial, progress, "PDF text")
         if ocr:
+            progress("  Running OCR on CPU")
             try:
                 ocr_page = page.get_textpage_ocr(language=args.ocr_language, dpi=300, full=True,
                                                  tessdata=str(args.models / "tessdata"))
             except Exception:
                 raise ReviewError(f"OCR failed on page {page.number + 1}. Run the setup script and check the OCR languages.") from None
             ocr_layer = text_layer(page, ocr_page)
-            detect(ocr_layer, detectors, findings, page, engine_status, args.allow_partial)
+            detect(ocr_layer, detectors, findings, page, engine_status, args.allow_partial, progress, "OCR text")
             if not ocr_layer.text.strip():
                 notes.append("OCR found no text. Inspect graphics, handwriting and signatures.")
         boxes = manual.get(str(page.number + 1), [])
@@ -137,6 +143,7 @@ def redact(source, output, detectors, engine_status, args, manual):
         add_manual_boxes(page, boxes, findings)
         if not findings:
             notes.append("No masks applied. Review the entire page.")
+        progress(f"  Rendering page with {len(findings)} mask rectangles")
         render_redacted(page, findings, output, args.dpi)
         pages.append({
             "page": page.number + 1, "size_points": list(page.rect)[2:], "used_ocr": ocr,
